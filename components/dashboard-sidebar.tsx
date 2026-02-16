@@ -60,8 +60,18 @@ export function DashboardSidebar() {
     }
   }
 
+  // Navigation items for both desktop and mobile
+  const navItems = [
+    { href: "/", icon: HomeIcon, label: "Home" },
+    { href: "/create-split", icon: ListPlus, label: "Create Split" },
+    { href: "/my-splits", icon: List, label: "Splits" },
+    { href: "/help", icon: HelpCircle, label: "Help" },
+  ]
+
   return (
-    <aside className="w-[230px] h-full bg-gradient-to-b from-white to-[oklch(0.95_0.05_264/0.3)] dark:from-card dark:to-[oklch(0.21_0_0/0.3)] flex flex-col overflow-hidden">
+    <>
+      {/* Desktop Sidebar */}
+      <aside className="hidden md:flex w-[230px] h-full bg-gradient-to-b from-white to-[oklch(0.95_0.05_264/0.3)] dark:from-card dark:to-[oklch(0.21_0_0/0.3)] flex-col overflow-hidden">
       {/* Navigation */}
       <nav className="flex-1 overflow-y-auto px-4 py-2 pt-6">
 
@@ -118,7 +128,7 @@ export function DashboardSidebar() {
 
       {/* Invite Card */}
       <div className="flex-shrink-0 p-3 pb-3">
-        <Card className="p-4 bg-card border border-border">
+        <Card className="p-4 bg-card border border-border shadow-none">
           {/* Header with icon */}
           <div className="flex items-center gap-2.5 mb-3">
             <div className="p-2 rounded-lg bg-primary/10">
@@ -202,6 +212,44 @@ export function DashboardSidebar() {
           <span className="text-base">Help</span>
         </Link>
       </div>
-    </aside>
+      </aside>
+
+      {/* Mobile Bottom Navigation */}
+      <div className="fixed bottom-4 left-1/2 -translate-x-1/2 z-50 md:hidden w-[calc(100%-2rem)] max-w-md">
+        <nav className="bg-background/95 backdrop-blur-xl border border-border rounded-2xl shadow-lg dark:shadow-2xl px-2 py-2">
+          <div className="flex items-center justify-around h-14">
+            {navItems.map((item) => {
+              const Icon = item.icon
+              const active = isActive(item.href)
+              
+              return (
+                <Link
+                  key={item.href}
+                  href={item.href}
+                  className={`flex flex-col items-center justify-center gap-1 flex-1 h-full relative transition-all duration-200 ${
+                    active 
+                      ? "text-primary" 
+                      : "text-muted-foreground"
+                  }`}
+                >
+                  <div className="relative">
+                    <Icon className={`w-5 h-5 transition-all ${active ? "scale-110" : ""}`} />
+                    {active && (
+                      <div className="absolute -top-1 -right-1 w-1.5 h-1.5 bg-primary rounded-full"></div>
+                    )}
+                  </div>
+                  <span className={`text-[10px] font-medium transition-all ${active ? "scale-105" : ""}`}>
+                    {item.label}
+                  </span>
+                  {active && (
+                    <div className="absolute top-0 left-1/2 -translate-x-1/2 w-8 h-0.5 bg-primary rounded-full"></div>
+                  )}
+                </Link>
+              )
+            })}
+          </div>
+        </nav>
+      </div>
+    </>
   )
 }
