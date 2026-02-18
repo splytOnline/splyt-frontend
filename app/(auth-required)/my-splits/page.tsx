@@ -166,13 +166,76 @@ const getInitials = (name?: string, address?: string) => {
 }
 
 const ITEMS_PER_PAGE = 10
-const CURRENT_USER_ID = "user-1" // This should come from auth context
+
+// Helper function to map API response to Split interface
+const mapApiResponseToSplit = (apiSplit: any, currentUserAddress: string, currentUserDisplayName?: string): Split => {
+  // Map status: active -> pending, completed -> settled, cancelled -> cancelled
+  let status: SplitStatus = "pending"
+  if (apiSplit.isCancelled) {
+    status = "cancelled"
+  } else if (apiSplit.isCompleted || apiSplit.status === "completed") {
+    status = "settled"
+  } else {
+    status = "pending"
+  }
+
+  // Get token icon based on currency
+  const tokenIcon = apiSplit.currency === "USDC" ? "/icons/usdc.svg" : "/icons/usdt.svg"
+  const tokenNetwork = "Arbitrum"
+  const tokenNetworkIcon = "/icons/arbitrum-arb-logo.svg"
+
+  // Find current user's participant data
+  const currentUserParticipant = apiSplit.participants.find(
+    (p: any) => p.walletAddress.toLowerCase() === currentUserAddress.toLowerCase()
+  )
+
+  // Map participants
+  const participants: Participant[] = apiSplit.participants.map((p: any) => ({
+    userId: p.walletAddress, // Using wallet address as userId
+    walletAddress: p.walletAddress,
+    displayName: p.name,
+    avatar: undefined, // API doesn't provide avatar
+    hasSettled: p.hasPaid || p.paid || false,
+    share: p.amountDue,
+  }))
+
+  // Handle creator - if current user is creator, use their data
+  const creatorAddress = apiSplit.creatorAddress || (apiSplit.isCreator ? currentUserAddress : "")
+  const creatorName = apiSplit.creatorName || (apiSplit.isCreator ? currentUserDisplayName : undefined)
+
+  // Format date
+  const dateInfo = formatRelativeDate(apiSplit.createdAt)
+
+  return {
+    splitId: apiSplit.splitId.toString(),
+    title: apiSplit.description,
+    description: apiSplit.description,
+    tokenIcon,
+    tokenDenom: apiSplit.currency,
+    tokenNetworkIcon,
+    tokenNetwork,
+    totalAmount: apiSplit.totalAmount,
+    yourShare: currentUserParticipant?.amountDue || 0,
+    status,
+    participants,
+    creator: {
+      userId: creatorAddress,
+      walletAddress: creatorAddress,
+      displayName: creatorName,
+      avatar: undefined,
+    },
+    currentUserHasSettled: apiSplit.youPaid || currentUserParticipant?.hasPaid || false,
+    date: dateInfo.date,
+    timestamp: dateInfo.timestamp,
+    createdAt: apiSplit.createdAt,
+  }
+}
 
 export default function MySplitsPage() {
   const router = useRouter()
   usePageTitle("My Splits")
   const { tokensAndBalances, userData } = useTokensAndBalances()
-  const { isConnected } = useAccount()
+  const { isConnected, address } = useAccount()
   const [searchQuery, setSearchQuery] = useState("")
   const [statusFilter, setStatusFilter] = useState<StatusFilter>("all")
   const [tokenFilter, setTokenFilter] = useState<string>("all")
@@ -184,208 +247,59 @@ export default function MySplitsPage() {
   const [pagination, setPagination] = useState<ApiResponse["pagination"] | null>(null)
   const [settlingSplitId, setSettlingSplitId] = useState<string | null>(null)
 
-  // Dummy splits data
-  const dummySplits: Split[] = [
-    {
-      splitId: "SPLIT-001",
-      title: "Dinner at Restaurant",
-      tokenDenom: "USDT",
-      tokenIcon: "/icons/usdt.svg",
-      tokenNetwork: "Arbitrum",
-      tokenNetworkIcon: "/icons/arbitrum-arb-logo.svg",
-      totalAmount: 150.00,
-      yourShare: 50.00,
-      status: "pending",
-      currentUserHasSettled: false,
-      participants: [
-        {
-          userId: "user-1",
-          walletAddress: "0x742d35Cc6634C0532925a3b844Bc9e7595f0bEb",
-          displayName: "You",
-          avatar: userData?.avatar,
-          hasSettled: false,
-          share: 50.00,
-        },
-        {
-          userId: "user-2",
-          walletAddress: "0x8ba1f109551bD432803012645Hac136c22C",
-          displayName: "Alice",
-          avatar: "/placeholder-user.jpg",
-          hasSettled: true,
-          share: 50.00,
-        },
-        {
-          userId: "user-3",
-          walletAddress: "0x9cd2e35Cc6634C0532925a3b844Bc9e7595f0bEb",
-          displayName: "Bob",
-          hasSettled: false,
-          share: 50.00,
-        },
-      ],
-      creator: {
-        userId: "user-2",
-        walletAddress: "0x8ba1f109551bD432803012645Hac136c22C",
-        displayName: "Alice",
-        avatar: "/placeholder-user.jpg",
-      },
-      date: "2 hours ago",
-      timestamp: Date.now() - 2 * 60 * 60 * 1000,
-      createdAt: new Date(Date.now() - 2 * 60 * 60 * 1000).toISOString(),
-    },
-    {
-      splitId: "SPLIT-002",
-      title: "Weekend Trip Expenses",
-      tokenDenom: "USDC",
-      tokenIcon: "/icons/usdc.svg",
-      tokenNetwork: "Arbitrum",
-      tokenNetworkIcon: "/icons/arbitrum-arb-logo.svg",
-      totalAmount: 500.00,
-      yourShare: 125.00,
-      status: "settled",
-      currentUserHasSettled: true,
-      participants: [
-        {
-          userId: "user-1",
-          walletAddress: "0x742d35Cc6634C0532925a3b844Bc9e7595f0bEb",
-          displayName: "You",
-          avatar: userData?.avatar,
-          hasSettled: true,
-          share: 125.00,
-        },
-        {
-          userId: "user-2",
-          walletAddress: "0x8ba1f109551bD432803012645Hac136c22C",
-          displayName: "Alice",
-          avatar: "/placeholder-user.jpg",
-          hasSettled: true,
-          share: 125.00,
-        },
-        {
-          userId: "user-4",
-          walletAddress: "0x1ba1f109551bD432803012645Hac136c22C",
-          displayName: "Charlie",
-          hasSettled: true,
-          share: 125.00,
-        },
-        {
-          userId: "user-5",
-          walletAddress: "0x2ba1f109551bD432803012645Hac136c22C",
-          displayName: "Diana",
-          hasSettled: true,
-          share: 125.00,
-        },
-      ],
-      creator: {
-        userId: "user-1",
-        walletAddress: "0x742d35Cc6634C0532925a3b844Bc9e7595f0bEb",
-        displayName: "You",
-        avatar: userData?.avatar,
-      },
-      date: "1 day ago",
-      timestamp: Date.now() - 24 * 60 * 60 * 1000,
-      createdAt: new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString(),
-    },
-    {
-      splitId: "SPLIT-003",
-      title: "Grocery Shopping",
-      tokenDenom: "USDC",
-      tokenIcon: "/icons/usdc.svg",
-      tokenNetwork: "Arbitrum",
-      tokenNetworkIcon: "/icons/arbitrum-arb-logo.svg",
-      totalAmount: 75.50,
-      yourShare: 37.75,
-      status: "pending",
-      currentUserHasSettled: false,
-      participants: [
-        {
-          userId: "user-1",
-          walletAddress: "0x742d35Cc6634C0532925a3b844Bc9e7595f0bEb",
-          displayName: "You",
-          avatar: userData?.avatar,
-          hasSettled: false,
-          share: 37.75,
-        },
-        {
-          userId: "user-6",
-          walletAddress: "0x3ba1f109551bD432803012645Hac136c22C",
-          displayName: "Eve",
-          hasSettled: false,
-          share: 37.75,
-        },
-      ],
-      creator: {
-        userId: "user-6",
-        walletAddress: "0x3ba1f109551bD432803012645Hac136c22C",
-        displayName: "Eve",
-      },
-      date: "3 days ago",
-      timestamp: Date.now() - 3 * 24 * 60 * 60 * 1000,
-      createdAt: new Date(Date.now() - 3 * 24 * 60 * 60 * 1000).toISOString(),
-    },
-    {
-      splitId: "SPLIT-004",
-      title: "Concert Tickets",
-      tokenDenom: "USDT",
-      tokenIcon: "/icons/usdt.svg",
-      tokenNetwork: "Arbitrum",
-      tokenNetworkIcon: "/icons/arbitrum-arb-logo.svg",
-      totalAmount: 200.00,
-      yourShare: 66.67,
-      status: "pending",
-      currentUserHasSettled: false,
-      participants: [
-        {
-          userId: "user-1",
-          walletAddress: "0x742d35Cc6634C0532925a3b844Bc9e7595f0bEb",
-          displayName: "You",
-          avatar: userData?.avatar,
-          hasSettled: false,
-          share: 66.67,
-        },
-        {
-          userId: "user-2",
-          walletAddress: "0x8ba1f109551bD432803012645Hac136c22C",
-          displayName: "Alice",
-          avatar: "/placeholder-user.jpg",
-          hasSettled: false,
-          share: 66.67,
-        },
-        {
-          userId: "user-3",
-          walletAddress: "0x9cd2e35Cc6634C0532925a3b844Bc9e7595f0bEb",
-          displayName: "Bob",
-          hasSettled: false,
-          share: 66.67,
-        },
-      ],
-      creator: {
-        userId: "user-1",
-        walletAddress: "0x742d35Cc6634C0532925a3b844Bc9e7595f0bEb",
-        displayName: "You",
-        avatar: userData?.avatar,
-      },
-      date: "5 days ago",
-      timestamp: Date.now() - 5 * 24 * 60 * 60 * 1000,
-      createdAt: new Date(Date.now() - 5 * 24 * 60 * 60 * 1000).toISOString(),
-    },
-  ]
-
-  // Load splits data
+  // Load splits data from API
   useEffect(() => {
-    setIsLoading(true)
-    setTimeout(() => {
-      setSplits(dummySplits)
-      setPagination({
-        currentPage: 1,
-        pageSize: ITEMS_PER_PAGE,
-        totalCount: dummySplits.length,
-        totalPages: Math.ceil(dummySplits.length / ITEMS_PER_PAGE),
-        hasNextPage: false,
-        hasPrevPage: false,
-      })
-      setIsLoading(false)
-    }, 500)
-  }, [currentPage])
+    if (!isConnected || !address) return
+
+    const loadSplits = async () => {
+      setIsLoading(true)
+      try {
+        const response = await fetch("/api/split/list", {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+          },
+        })
+
+        const data: ApiResponse = await response.json()
+
+        if (!response.ok || !data.success) {
+          toast.error(data.message || "Failed to load splits. Please try again.")
+          setSplits([])
+          setPagination(null)
+          return
+        }
+
+        // Map API response to Split interface
+        const mappedSplits = data.data.map((apiSplit) => mapApiResponseToSplit(apiSplit, address, userData?.displayName))
+
+        setSplits(mappedSplits)
+        
+        // Set pagination if provided, otherwise calculate from data
+        if (data.pagination) {
+          setPagination(data.pagination)
+        } else {
+          setPagination({
+            currentPage: 1,
+            pageSize: ITEMS_PER_PAGE,
+            totalCount: mappedSplits.length,
+            totalPages: Math.ceil(mappedSplits.length / ITEMS_PER_PAGE),
+            hasNextPage: false,
+            hasPrevPage: false,
+          })
+        }
+      } catch (error: any) {
+        console.error("Error loading splits:", error)
+        toast.error(error.message || "Failed to load splits. Please try again.")
+        setSplits([])
+        setPagination(null)
+      } finally {
+        setIsLoading(false)
+      }
+    }
+
+    loadSplits()
+  }, [isConnected, address, currentPage])
 
   // Get unique tokens for filter
   const uniqueTokens = useMemo(() => {
@@ -460,33 +374,22 @@ export default function MySplitsPage() {
   }
 
   const handleSettle = async (splitId: string) => {
+    if (!address) {
+      toast.error("Wallet not connected")
+      return
+    }
+
     setSettlingSplitId(splitId)
     try {
-      // Simulate API call
-      await new Promise((resolve) => setTimeout(resolve, 1000))
+      // TODO: Call settle API when available
+      // For now, just show a message
+      toast.info("Settle functionality will be implemented soon")
       
-      // Update the split in state
-      setSplits((prevSplits) =>
-        prevSplits.map((split) => {
-          if (split.splitId === splitId) {
-            const updatedParticipants = split.participants.map((p) =>
-              p.userId === CURRENT_USER_ID ? { ...p, hasSettled: true } : p
-            )
-            const allSettled = updatedParticipants.every((p) => p.hasSettled)
-            return {
-              ...split,
-              participants: updatedParticipants,
-              currentUserHasSettled: true,
-              status: allSettled ? "settled" : split.status,
-            }
-          }
-          return split
-        })
-      )
-      
-      toast.success("Your share has been settled successfully!")
-    } catch (error) {
-      toast.error("Failed to settle. Please try again.")
+      // Reload splits after settling
+      // await loadSplits()
+    } catch (error: any) {
+      console.error("Error settling split:", error)
+      toast.error(error.message || "Failed to settle. Please try again.")
     } finally {
       setSettlingSplitId(null)
     }
