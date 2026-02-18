@@ -65,9 +65,18 @@ export default function CreateSplitPage() {
   const { userData } = useTokensAndBalances()
   const { isConnected, address } = useAccount()
   const [title, setTitle] = useState("")
-  const [token, setToken] = useState<"USDC" | "USDT">("USDC")
+  const [token, setToken] = useState<"USDC" | "USDT" | "ARB" | "ETH" | "BTC">("USDC")
   const [splitType, setSplitType] = useState<SplitType>("equal")
   const [totalAmount, setTotalAmount] = useState("")
+
+  // Token configuration
+  const tokenConfig = {
+    USDC: { icon: "/icons/usdc.svg", available: true, label: "USDC" },
+    USDT: { icon: "/icons/usdt.svg", available: false, label: "USDT" },
+    ARB: { icon: "/icons/arbitrum-arb-logo.svg", available: false, label: "ARB" },
+    ETH: { icon: "/icons/eth.svg", available: false, label: "ETH" },
+    BTC: { icon: "/icons/btc.svg", available: false, label: "BTC" },
+  }
   
   const [participants, setParticipants] = useState<Participant[]>([
     { 
@@ -252,6 +261,11 @@ export default function CreateSplitPage() {
       toast.error("Please enter a valid total amount")
       return false
     }
+    // Check if selected token is available
+    if (!tokenConfig[token].available) {
+      toast.error(`${tokenConfig[token].label} is not available yet. Please select USDC.`)
+      return false
+    }
     if (participants.length < 2) {
       toast.error("At least 2 participants are required (including you)")
       return false
@@ -268,7 +282,7 @@ export default function CreateSplitPage() {
       const customTotal = calculateCustomTotal()
       const total = parseFloat(totalAmount)
       if (Math.abs(customTotal - total) > 0.01) {
-        toast.error(`Custom amounts must equal total amount (${total.toFixed(2)} ${token})`)
+        toast.error(`Custom amounts must equal total amount (${total.toFixed(2)} ${tokenConfig[token].label})`)
         return false
       }
     }
@@ -501,44 +515,54 @@ export default function CreateSplitPage() {
                           className="font-mono text-lg"
                         />
                       </div>
-                      <Select value={token} onValueChange={(value: "USDC" | "USDT") => setToken(value)}>
+                      <Select 
+                        value={token} 
+                        onValueChange={(value: "USDC" | "USDT" | "ARB" | "ETH" | "BTC") => {
+                          if (tokenConfig[value as keyof typeof tokenConfig].available) {
+                            setToken(value)
+                          }
+                        }}
+                      >
                         <SelectTrigger className="w-[140px]">
                           <div className="flex items-center gap-2">
                             <Image
-                              src={`/icons/${token.toLowerCase()}.svg`}
+                              src={tokenConfig[token].icon}
                               alt={token}
                               width={16}
                               height={16}
                               className="w-4 h-4"
                             />
-                            <span>{token}</span>
+                            <span>{tokenConfig[token].label}</span>
                           </div>
                         </SelectTrigger>
                         <SelectContent>
-                          <SelectItem value="USDC">
-                            <div className="flex items-center gap-2">
-                              <Image
-                                src="/icons/usdc.svg"
-                                alt="USDC"
-                                width={20}
-                                height={20}
-                                className="w-5 h-5"
-                              />
-                              <span>USDC</span>
-                            </div>
-                          </SelectItem>
-                          <SelectItem value="USDT">
-                            <div className="flex items-center gap-2">
-                              <Image
-                                src="/icons/usdt.svg"
-                                alt="USDT"
-                                width={20}
-                                height={20}
-                                className="w-5 h-5"
-                              />
-                              <span>USDT</span>
-                            </div>
-                          </SelectItem>
+                          {(Object.keys(tokenConfig) as Array<keyof typeof tokenConfig>).map((tokenKey) => {
+                            const config = tokenConfig[tokenKey]
+                            return (
+                              <SelectItem
+                                key={tokenKey}
+                                value={tokenKey}
+                                disabled={!config.available}
+                                className={!config.available ? "opacity-60 cursor-not-allowed" : ""}
+                              >
+                                <div className="flex items-center justify-between gap-2 w-full">
+                                  <div className="flex items-center gap-2">
+                                    <Image
+                                      src={config.icon}
+                                      alt={config.label}
+                                      width={20}
+                                      height={20}
+                                      className="w-5 h-5"
+                                    />
+                                    <span>{config.label}</span>
+                                  </div>
+                                  {!config.available && (
+                                    <span className="text-xs text-muted-foreground ml-auto">Upcoming</span>
+                                  )}
+                                </div>
+                              </SelectItem>
+                            )
+                          })}
                         </SelectContent>
                       </Select>
                     </div>
@@ -547,11 +571,11 @@ export default function CreateSplitPage() {
                         <>
                           Each participant will pay{" "}
                           <span className="font-semibold font-mono">
-                            {calculateEqualShare().toFixed(2)} {token}
+                            {calculateEqualShare().toFixed(2)} {tokenConfig[token].label}
                           </span>
                         </>
                       ) : (
-                        "Enter the total amount and select token (USDC or USDT on Arbitrum)"
+                        `Enter the total amount and select token${!tokenConfig[token].available ? " (USDC available now, others coming soon)" : ""}`
                       )}
                     </FieldDescription>
                   </FieldContent>
@@ -642,7 +666,7 @@ export default function CreateSplitPage() {
                           </div>
                           {splitType === "custom" && (
                             <div className="space-y-1.5">
-                              <Label className="text-sm">Amount ({token})</Label>
+                              <Label className="text-sm">Amount ({tokenConfig[token].label})</Label>
                               <Input
                                 type="number"
                                 step="0.01"
@@ -689,13 +713,16 @@ export default function CreateSplitPage() {
                 <div className="text-sm text-muted-foreground">Token</div>
                 <div className="flex items-center gap-2">
                   <Image
-                    src={`/icons/${token.toLowerCase()}.svg`}
-                    alt={token}
+                    src={tokenConfig[token].icon}
+                    alt={tokenConfig[token].label}
                     width={20}
                     height={20}
                     className="w-5 h-5"
                   />
-                  <span className="font-medium">{token}</span>
+                  <span className="font-medium">{tokenConfig[token].label}</span>
+                  {!tokenConfig[token].available && (
+                    <span className="text-xs text-muted-foreground bg-muted px-2 py-0.5 rounded">Upcoming</span>
+                  )}
                 </div>
               </div>
               <Separator />
@@ -709,7 +736,7 @@ export default function CreateSplitPage() {
               <div className="space-y-2">
                 <div className="text-sm text-muted-foreground">Total Amount</div>
                 <div className="text-lg font-bold font-mono">
-                  {totalAmount || "0.00"} {token}
+                  {totalAmount || "0.00"} {tokenConfig[token].label}
                 </div>
               </div>
               <Separator />
@@ -723,7 +750,7 @@ export default function CreateSplitPage() {
                   <div className="space-y-2">
                     <div className="text-sm text-muted-foreground">Per Person</div>
                     <div className="text-lg font-semibold font-mono text-primary">
-                      {calculateEqualShare().toFixed(2)} {token}
+                      {calculateEqualShare().toFixed(2)} {tokenConfig[token].label}
                     </div>
                   </div>
                 </>
@@ -742,13 +769,13 @@ export default function CreateSplitPage() {
                           : "text-foreground"
                       }`}
                     >
-                      {customTotal.toFixed(2)} {token}
+                      {customTotal.toFixed(2)} {tokenConfig[token].label}
                     </div>
                     {showCustomWarning && (
                       <div className="text-xs text-destructive">
                         {difference > 0
-                          ? `Exceeds total by ${difference.toFixed(2)} ${token}`
-                          : `Short by ${Math.abs(difference).toFixed(2)} ${token}`}
+                          ? `Exceeds total by ${difference.toFixed(2)} ${tokenConfig[token].label}`
+                          : `Short by ${Math.abs(difference).toFixed(2)} ${tokenConfig[token].label}`}
                       </div>
                     )}
                     {!showCustomWarning && Math.abs(difference) < 0.01 && total > 0 && (

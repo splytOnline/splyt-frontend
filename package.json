@@ -2,7 +2,7 @@
   "name": "splyt",
   "version": "0.1.0",
   "private": true,
-  "description": "Splyt makes splitting bills easy, but using Stablecoins on Arbitrum with zero gas fees for users.",
+  "description": "Splyt makes splitting bills easy, but using Stablecoins with zero gas fees for users.",
   "scripts": {
     "build": "next build",
     "dev": "next dev",

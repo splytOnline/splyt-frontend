@@ -10,7 +10,7 @@ const _geistMono = Geist_Mono({ subsets: ["latin"] });
 
 export const metadata: Metadata = {
   title: 'Splyt',
-  description: 'Splyt makes splitting bills as easy as Venmo, but using USDC on Arbitrum with zero gas fees for users.'
+  description: 'Splyt makes splitting bills as easy as Venmo, but using USDC  with zero gas fees for users.'
 }
 
 export default function RootLayout({

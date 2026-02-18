@@ -2,7 +2,7 @@
 
 > **Split bills with friends using crypto. Zero fees. Zero friction.**
 
-Venmo meets Web3. Pay your share in USDC on Arbitrum — instantly, fairly, and completely free.
+Venmo meets Web3. Pay your share crypto — instantly, fairly, and completely free.
 
 [![Explore Live](https://img.shields.io/badge/live-splyt.online-blue)](https://splyt.online)
 [![Smart Contracts](https://img.shields.io/badge/contracts-github-black)](https://github.com/splytOnline/smart-contracts)
@@ -13,9 +13,9 @@ Venmo meets Web3. Pay your share in USDC on Arbitrum — instantly, fairly, and 
 
 **The Problem:** Splitting bills sucks. Venmo charges fees. International transfers are expensive. Everyone needs different apps. Someone always "forgets" to pay back.
 
-**The Solution:** Splyt lets groups split any expense using USDC on Arbitrum. Create a split, share a link via WhatsApp, everyone pays their share. When everyone's paid, funds release automatically. No fees. No friction. No awkward reminders.
+**The Solution:** Splyt lets groups split any expense using crypto. Create a split, share a link via WhatsApp, everyone pays their share. When everyone's paid, funds release automatically. No fees. No friction. No awkward reminders.
 
-**The Magic:** Built on Arbitrum's L2, so transactions cost pennies. We sponsor all gas fees, so users pay **absolutely nothing**. Ever.
+**The Magic:** Building on L2, so transactions cost pennies. We sponsor all gas fees, so users pay **absolutely nothing**. Ever.
 
 ---
 
@@ -37,17 +37,6 @@ Venmo meets Web3. Pay your share in USDC on Arbitrum — instantly, fairly, and 
 
 ---
 
-## 🚀 Why Arbitrum?
-
-We chose Arbitrum because:
-- **Low Fees** — $0.10 per split vs $5+ on Ethereum mainnet
-- **Fast Finality** — 2-second confirmations, not 15 minutes
-- **USDC Native** — Stablecoin infrastructure already mature
-- **Ecosystem Aligned** — Arbitrum DAO supports real-world consumer apps
-
-Other L2s couldn't match this combo of speed, cost, and liquidity.
-
----
 
 
 ## 🏗️ Architecture
@@ -60,7 +49,7 @@ Other L2s couldn't match this combo of speed, cost, and liquidity.
        │                 │
        ▼                 ▼
 ┌─────────────┐   ┌─────────────┐
-│  Next.js    │   │  Arbitrum   │
+│  Next.js    │   │             │
 │  Frontend   │   │   Smart     │
 │             │   │  Contracts  │
 │  (UI/UX)    │   │  (Money)    │
@@ -143,7 +132,7 @@ MIT © Splyt
 
 <div align="center">
 
-**Made with ❤️ for the Arbitrum ecosystem**
+**Made with ❤️ for the Web3 ecosystem**
 
 [⭐ Star this repo](https://github.com/splytOnline/splyt-frontend) • [🐛 Report bug](https://github.com/splytOnline/splyt-frontend/issues) • [💡 Request feature](https://github.com/splytOnline/splyt-frontend/issues)
 
