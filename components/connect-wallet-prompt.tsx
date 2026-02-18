@@ -51,7 +51,7 @@ export function ConnectWalletPrompt() {
             height={14}
             className="w-3.5 h-3.5"
           />
-          <span>Powered by Arbitrum Network</span>
+          <span>Powered by Arbitrum Sepolia</span>
         </div>
       </div>
     </div>

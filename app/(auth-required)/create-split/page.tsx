@@ -15,6 +15,9 @@ import {
   User,
   Equal,
   Calculator,
+  CheckCircle2,
+  ExternalLink,
+  Copy,
 } from "lucide-react"
 import Image from "next/image"
 import { Button } from "@/components/ui/button"
@@ -30,13 +33,22 @@ import {
 import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Field, FieldContent, FieldDescription, FieldLabel, FieldGroup } from "@/components/ui/field"
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog"
 import { toast } from "sonner"
 import { Separator } from "@/components/ui/separator"
+import { Spinner } from "@/components/ui/spinner"
 import { useTokensAndBalances } from "@/contexts/tokens-balances-context"
 import { useEffect } from "react"
 import { useAccount } from "wagmi"
 import { ConnectWalletPrompt } from "@/components/connect-wallet-prompt"
 import { usePageTitle } from "@/hooks/use-page-title"
+import { generateNameFromAddress } from "@/lib/names"
 type SplitType = "equal" | "custom"
 
 interface Participant {
@@ -71,6 +83,35 @@ export default function CreateSplitPage() {
     },
   ])
   const [isSubmitting, setIsSubmitting] = useState(false)
+  const [showSuccessDialog, setShowSuccessDialog] = useState(false)
+  const [successData, setSuccessData] = useState<{
+    splitId: number
+    contractAddress: string
+    txHash: string
+  } | null>(null)
+  const [currentQuote, setCurrentQuote] = useState(0)
+
+  // Cool quotes for split creation
+  const loadingQuotes = [
+    "Creating your split on the blockchain...",
+    "Setting up fair distribution...",
+    "Securing your split with smart contracts...",
+    "Almost there, just a moment...",
+    "Building your split, one block at a time...",
+    "Deploying your split contract...",
+    "Making bill splitting effortless...",
+  ]
+
+  // Rotate quotes during submission
+  useEffect(() => {
+    if (!isSubmitting) return
+
+    const interval = setInterval(() => {
+      setCurrentQuote((prev) => (prev + 1) % loadingQuotes.length)
+    }, 2000)
+
+    return () => clearInterval(interval)
+  }, [isSubmitting, loadingQuotes.length])
 
   // Update first participant when userData changes
   useEffect(() => {
@@ -126,11 +167,31 @@ export default function CreateSplitPage() {
   }
 
   const updateParticipant = (id: string, field: "name" | "walletAddress" | "amount", value: string | number) => {
-    setParticipants(
-      participants.map((p) =>
-        p.id === id ? { ...p, [field]: value } : p
-      )
-    )
+    setParticipants((prev) => {
+      const updated = prev.map((p) => {
+        if (p.id !== id) return p
+        
+        const updatedParticipant = { ...p, [field]: value }
+        
+        // Auto-generate name when wallet address is entered (only for non-current users)
+        if (field === "walletAddress" && !p.isCurrentUser && typeof value === "string") {
+          const address = value.trim()
+          // Only auto-generate if address is valid (42 chars including 0x prefix)
+          if (address && address.startsWith("0x") && address.length === 42) {
+            try {
+              const generatedName = generateNameFromAddress(address)
+              updatedParticipant.name = generatedName
+            } catch (error) {
+              // Invalid address format, don't generate name
+              console.error("Invalid address format:", error)
+            }
+          }
+        }
+        
+        return updatedParticipant
+      })
+      return updated
+    })
   }
 
   const calculateEqualShare = () => {
@@ -141,6 +202,41 @@ export default function CreateSplitPage() {
 
   const calculateCustomTotal = () => {
     return participants.reduce((sum, p) => sum + (p.amount || 0), 0)
+  }
+
+  const resetForm = () => {
+    setTitle("")
+    setTotalAmount("")
+    setSplitType("equal")
+    setToken("USDC")
+    setParticipants([
+      { 
+        id: "1", 
+        name: userData?.displayName || "You", 
+        walletAddress: address || "",
+        isCurrentUser: true
+      },
+      {
+        id: "2",
+        name: "",
+        walletAddress: "",
+      },
+    ])
+  }
+
+  const copyToClipboard = async (text: string, label: string) => {
+    try {
+      await navigator.clipboard.writeText(text)
+      toast.success(`${label} copied to clipboard`)
+    } catch (error) {
+      toast.error("Failed to copy")
+    }
+  }
+
+  const truncateAddress = (address: string, startChars: number = 6, endChars: number = 4) => {
+    if (!address) return ""
+    if (address.length <= startChars + endChars) return address
+    return `${address.slice(0, startChars)}...${address.slice(-endChars)}`
   }
 
   const validateForm = () => {
@@ -184,30 +280,48 @@ export default function CreateSplitPage() {
 
     setIsSubmitting(true)
     try {
-      // Simulate API call
-      await new Promise((resolve) => setTimeout(resolve, 1500))
-
-      const splitData = {
-        title: title.trim(),
-        token,
-        splitType,
+      // Prepare API request body
+      const apiBody = {
+        description: title.trim(),
         totalAmount: parseFloat(totalAmount),
         participants: participants.map((p) => ({
-          name: p.name.trim(),
           walletAddress: p.walletAddress.trim(),
-          share: splitType === "equal" ? calculateEqualShare() : (p.amount || 0),
+          name: p.name.trim(),
+          amountDue: splitType === "equal" ? calculateEqualShare() : (p.amount || 0),
         })),
       }
 
-      console.log("Creating split:", splitData)
-      toast.success("Split created successfully!")
-      
-      // Redirect to my-splits page
-      setTimeout(() => {
-        router.push("/my-splits")
-      }, 1000)
-    } catch (error) {
-      toast.error("Failed to create split. Please try again.")
+      // Call create split API
+      const response = await fetch("/api/split/create", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify(apiBody),
+      })
+
+      const data = await response.json()
+
+      if (!response.ok || !data.success) {
+        toast.error(data.message || "Failed to create split. Please try again.")
+        return
+      }
+
+      // Store success data and show dialog
+      if (data.data) {
+        setSuccessData({
+          splitId: data.data.splitId,
+          contractAddress: data.data.contractAddress,
+          txHash: data.data.txHash,
+        })
+        setShowSuccessDialog(true)
+        resetForm()
+      } else {
+        toast.success(data.message || "Split created successfully!")
+      }
+    } catch (error: any) {
+      console.error("Error creating split:", error)
+      toast.error(error.message || "Failed to create split. Please try again.")
     } finally {
       setIsSubmitting(false)
     }
@@ -224,7 +338,48 @@ export default function CreateSplitPage() {
   }
 
   return (
-    <div className="space-y-6 max-w-4xl mx-auto">
+    <>
+      {/* Loading Overlay */}
+      {isSubmitting && (
+        <div className="fixed inset-0 z-[9999] flex items-center justify-center bg-background/80 backdrop-blur-md animate-in fade-in duration-300">
+          <div className="flex flex-col items-center gap-8 px-6">
+            {/* Spinner with animated rings */}
+            <div className="relative">
+              {/* Outer pulsing ring */}
+              <div className="absolute inset-0 rounded-full bg-primary/10 animate-ping"></div>
+              {/* Middle ring */}
+              <div className="absolute inset-0 rounded-full bg-primary/20 animate-pulse"></div>
+              {/* Inner spinner container */}
+              <div className="relative rounded-full bg-card p-8 shadow-2xl border-2 border-primary/30 backdrop-blur-sm">
+                <Spinner className="w-16 h-16 text-primary" />
+              </div>
+            </div>
+            
+            {/* Quote with fade animation */}
+            <div className="text-center space-y-3 max-w-md">
+              <p 
+                key={currentQuote}
+                className="text-xl font-semibold text-foreground transition-all duration-700 ease-in-out"
+                style={{
+                  opacity: 1,
+                  transform: 'translateY(0)',
+                }}
+              >
+                {loadingQuotes[currentQuote]}
+              </p>
+              <div className="flex items-center justify-center gap-2">
+                <div className="h-1 w-1 rounded-full bg-primary animate-pulse"></div>
+                <p className="text-sm text-muted-foreground">
+                  Please wait while we create your split
+                </p>
+                <div className="h-1 w-1 rounded-full bg-primary animate-pulse"></div>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      <div className="space-y-6 max-w-4xl mx-auto">
       {/* Header */}
       <div className="flex items-center gap-4">
         <Button
@@ -454,18 +609,6 @@ export default function CreateSplitPage() {
                           </div>
                           <div className="grid gap-3 sm:grid-cols-2">
                             <div className="space-y-1.5">
-                              <Label className="text-sm">Name</Label>
-                              <Input
-                                placeholder={participant.isCurrentUser ? "Your name" : "Participant name"}
-                                value={participant.name}
-                                onChange={(e) =>
-                                  updateParticipant(participant.id, "name", e.target.value)
-                                }
-                                disabled={participant.isCurrentUser}
-                                className={participant.isCurrentUser ? "bg-muted/50" : ""}
-                              />
-                            </div>
-                            <div className="space-y-1.5">
                               <Label className="text-sm">Wallet Address</Label>
                               <div className="relative">
                                 <Wallet className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
@@ -483,6 +626,18 @@ export default function CreateSplitPage() {
                                   className={`pl-9 font-mono text-sm ${participant.isCurrentUser ? "bg-muted/50" : ""}`}
                                 />
                               </div>
+                            </div>
+                            <div className="space-y-1.5">
+                              <Label className="text-sm">Name</Label>
+                              <Input
+                                placeholder={participant.isCurrentUser ? "Your name" : "Participant name"}
+                                value={participant.name}
+                                onChange={(e) =>
+                                  updateParticipant(participant.id, "name", e.target.value)
+                                }
+                                disabled={participant.isCurrentUser}
+                                className={participant.isCurrentUser ? "bg-muted/50" : ""}
+                              />
                             </div>
                           </div>
                           {splitType === "custom" && (
@@ -617,6 +772,121 @@ export default function CreateSplitPage() {
           </Card>
         </div>
       </div>
+
+      {/* Success Dialog */}
+      <Dialog open={showSuccessDialog} onOpenChange={setShowSuccessDialog}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <div className="flex items-center gap-3">
+              <div className="flex h-12 w-12 items-center justify-center rounded-full bg-emerald-100 dark:bg-emerald-900/20">
+                <CheckCircle2 className="h-6 w-6 text-emerald-600 dark:text-emerald-400" />
+              </div>
+              <div>
+                <DialogTitle className="text-xl">Split Created Successfully!</DialogTitle>
+                <DialogDescription className="mt-1">
+                  Your split has been created on the blockchain
+                </DialogDescription>
+              </div>
+            </div>
+          </DialogHeader>
+          
+          {successData && (
+            <div className="space-y-4 py-4">
+              {/* Split ID */}
+              <div className="space-y-2">
+                <Label className="text-sm font-medium text-muted-foreground">Split ID</Label>
+                <div className="flex items-center gap-2 rounded-lg border bg-muted/50 p-3">
+                  <span className="font-mono text-sm font-semibold flex-1">{successData.splitId}</span>
+                  <Button
+                    variant="ghost"
+                    size="icon"
+                    className="h-8 w-8"
+                    onClick={() => copyToClipboard(successData.splitId.toString(), "Split ID")}
+                  >
+                    <Copy className="h-4 w-4" />
+                  </Button>
+                </div>
+              </div>
+
+              {/* Contract Address */}
+              <div className="space-y-2">
+                <Label className="text-sm font-medium text-muted-foreground">Contract Address</Label>
+                <div className="flex items-center gap-2 rounded-lg border bg-muted/50 p-3">
+                  <span className="font-mono text-xs flex-1 min-w-0 break-all" title={successData.contractAddress}>
+                    {truncateAddress(successData.contractAddress)}
+                  </span>
+                  <div className="flex gap-1 shrink-0">
+                    <Button
+                      variant="ghost"
+                      size="icon"
+                      className="h-8 w-8 shrink-0"
+                      onClick={() => copyToClipboard(successData.contractAddress, "Contract address")}
+                    >
+                      <Copy className="h-4 w-4" />
+                    </Button>
+                    <Button
+                      variant="ghost"
+                      size="icon"
+                      className="h-8 w-8 shrink-0"
+                      onClick={() => window.open(`https://sepolia.arbiscan.io/address/${successData.contractAddress}`, "_blank")}
+                    >
+                      <ExternalLink className="h-4 w-4" />
+                    </Button>
+                  </div>
+                </div>
+              </div>
+
+              {/* Transaction Hash */}
+              <div className="space-y-2">
+                <Label className="text-sm font-medium text-muted-foreground">Transaction Hash</Label>
+                <div className="flex items-center gap-2 rounded-lg border bg-muted/50 p-3">
+                  <span className="font-mono text-xs flex-1 min-w-0 break-all" title={successData.txHash}>
+                    {truncateAddress(successData.txHash)}
+                  </span>
+                  <div className="flex gap-1 shrink-0">
+                    <Button
+                      variant="ghost"
+                      size="icon"
+                      className="h-8 w-8 shrink-0"
+                      onClick={() => copyToClipboard(successData.txHash, "Transaction hash")}
+                    >
+                      <Copy className="h-4 w-4" />
+                    </Button>
+                    <Button
+                      variant="ghost"
+                      size="icon"
+                      className="h-8 w-8 shrink-0"
+                      onClick={() => window.open(`https://sepolia.arbiscan.io/tx/${successData.txHash}`, "_blank")}
+                    >
+                      <ExternalLink className="h-4 w-4" />
+                    </Button>
+                  </div>
+                </div>
+              </div>
+            </div>
+          )}
+
+          <div className="flex gap-3 pt-4">
+            <Button
+              variant="outline"
+              className="flex-1"
+              onClick={() => setShowSuccessDialog(false)}
+            >
+              Close
+            </Button>
+            <Button
+              className="flex-1"
+              onClick={() => {
+                setShowSuccessDialog(false)
+                router.push("/my-splits")
+              }}
+            >
+              View My Splits
+            </Button>
+          </div>
+        </DialogContent>
+      </Dialog>
     </div>
+    </>
   )
 }
