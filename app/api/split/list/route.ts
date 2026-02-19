@@ -18,7 +18,7 @@ export async function POST(req: NextRequest) {
 
 
     const response = await axios.get(
-      `${process.env.API_URL}split/participant`,
+      `${process.env.API_URL}${process.env.API_VERSION}split/participant`,
       {
         headers: getAxiosHeaders(header, token),
       }

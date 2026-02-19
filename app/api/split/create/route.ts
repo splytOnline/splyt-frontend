@@ -19,7 +19,7 @@ export async function POST(req: NextRequest) {
 
 
     const response = await axios.post(
-      `${process.env.API_URL}split/create`,
+      `${process.env.API_URL}${process.env.API_VERSION}split/create`,
       body,
       {
         headers: getAxiosHeaders(header, token),

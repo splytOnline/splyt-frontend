@@ -8,7 +8,7 @@ export async function POST(req: NextRequest) {
     const body = await req.json();
     const header = req.headers
     const response = await axios.post(
-      `${process.env.API_URL}auth/hook`,
+      `${process.env.API_URL}${process.env.API_VERSION}auth/hook`,
       {
         walletAddress: body.walletAddress,
         signature: body.signature,
